@@ -102,14 +102,16 @@ function VideoCell({ member, stream, isLocal = false, localStream = null }) {
         }}
       />
       
-      {/* Hidden audio element for when video is not showing but we still need audio */}
-      {!isLocal && !showVideo && streamReady && (
+      {/* ALWAYS render audio element for remote streams to ensure audio plays even when video is hidden */}
+      {!isLocal && stream && (
         <audio
           autoPlay
           playsInline
           ref={el => {
             if (el && stream) {
               el.srcObject = stream;
+              // Force play in case autoplay is blocked
+              el.play().catch(err => console.log('Audio autoplay blocked:', err));
             }
           }}
           style={{ display: 'none' }}
@@ -209,12 +211,16 @@ export default function VideoGrid({ members = [], streams = {}, localStream = nu
   const localMember = members.find(m => m.username === currentUsername);
   const otherMembers = members.filter(m => m.username !== currentUsername);
 
-  // Debug logging
-  // console.log('VideoGrid render:', {
+  // Debug logging - uncomment to troubleshoot
+  // console.log('📺 VideoGrid render:', {
   //   memberCount: members.length,
   //   streamKeys: Object.keys(streams),
   //   hasLocalStream: !!localStream,
-  //   otherMembers: otherMembers.map(m => ({ username: m.username, socketId: m.socketId }))
+  //   otherMembers: otherMembers.map(m => ({ 
+  //     username: m.username, 
+  //     socketId: m.socketId,
+  //     hasStream: !!streams[m.socketId]
+  //   }))
   // });
 
   return (

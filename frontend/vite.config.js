@@ -35,8 +35,24 @@ export default defineConfig(({ mode }) => ({
     },
     chunkSizeWarningLimit: 1000
   },
+  resolve: {
+    alias: {
+      // Polyfill Node.js modules for simple-peer
+      stream: 'readable-stream',
+      buffer: 'buffer'
+    }
+  },
   define: {
     global: 'globalThis',
-    'process.env': {}
+    'process.env': {},
+    'process.browser': true
+  },
+  optimizeDeps: {
+    include: ['buffer', 'process', 'readable-stream'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   }
 }));

@@ -79,11 +79,14 @@ class WebRTCService {
     if (this.peers.has(peerId)) {
       const existingPeer = this.peers.get(peerId);
       if (!existingPeer.destroyed) {
+        // console.log(`⚠️ Peer ${peerId} already exists, reusing`);
         return existingPeer;
       }
       // Clean up destroyed peer
       this.peers.delete(peerId);
     }
+
+    // console.log(`🔗 Creating peer connection to ${peerId}, initiator: ${initiator}`);
 
     const peer = new SimplePeer({
       initiator,
@@ -119,19 +122,25 @@ class WebRTCService {
 
     // Handle ALL signal events (offers, answers, AND ICE candidates)
     peer.on('signal', (data) => {
+      // console.log(`📡 Sending signal to ${peerId}:`, data.type || 'ice-candidate');
       // Send every signal to the remote peer via socket
       this.onSignalCallbacks.forEach(cb => cb(peerId, data));
     });
 
     peer.on('stream', (remoteStream) => {
+      // console.log(`🎥 Received stream from peer ${peerId}:`, {
+      //   video: remoteStream.getVideoTracks().length,
+      //   audio: remoteStream.getAudioTracks().length
+      // });
       this.onStreamCallbacks.forEach(cb => cb(peerId, remoteStream));
     });
 
     peer.on('track', (track, stream) => {
-      // Track received
+      // console.log(`🎵 Track received from ${peerId}:`, track.kind);
     });
 
     peer.on('connect', () => {
+      // console.log(`✅ Peer ${peerId} connected!`);
       // Process any pending ICE candidates
       if (this.pendingCandidates.has(peerId)) {
         const candidates = this.pendingCandidates.get(peerId);
@@ -185,6 +194,7 @@ class WebRTCService {
 
   // Handle incoming signal (offer, answer, or ICE candidate)
   handleSignal(peerId, signal) {
+    // console.log(`📥 Received signal from ${peerId}:`, signal.type || 'ice-candidate');
     let peer = this.peers.get(peerId);
     
     // If we receive an offer, we need to create a non-initiator peer

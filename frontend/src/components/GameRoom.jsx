@@ -75,6 +75,10 @@ export default function GameRoom({
         
         // Listen for remote streams
         webrtcService.onStream((peerId, stream) => {
+          // console.log(`🎥 Received remote stream from peer: ${peerId}`, {
+          //   videoTracks: stream.getVideoTracks().length,
+          //   audioTracks: stream.getAudioTracks().length
+          // });
           if (mounted) {
             setStreams(prev => ({ ...prev, [peerId]: stream }));
           }
@@ -121,15 +125,18 @@ export default function GameRoom({
         socketService.on('webrtc-ice-candidate', handleIceCandidate);
 
         // Connect to existing members (after a small delay to ensure stream is ready)
+        // I am the NEW member joining, so I initiate connections to existing members
         setTimeout(() => {
           if (!mounted) return;
           const currentMembers = membersRef.current;
+          // console.log('🔗 Connecting to existing members:', currentMembers.filter(m => m.username !== username).map(m => m.username));
           for (const member of currentMembers) {
             if (member.username !== username && member.socketId) {
+              // console.log(`📞 Initiating connection to ${member.username} (${member.socketId})`);
               webrtcService.connectToPeer(member.socketId);
             }
           }
-        }, 1000);
+        }, 1500);
         
         setWebrtcInitialized(true);
         
@@ -147,16 +154,11 @@ export default function GameRoom({
 
     initWebRTC();
 
-    // Handle new member joining - connect to them
+    // Handle new member joining - DON'T initiate from here!
+    // The new member will initiate connections to us, we just wait for their offer
     const handleNewMember = ({ username: newUsername, members: newMembers }) => {
-      const newMember = newMembers.find(m => m.username === newUsername);
-      if (newMember && newUsername !== username && newMember.socketId) {
-        setTimeout(() => {
-          if (mounted) {
-            webrtcService.connectToPeer(newMember.socketId);
-          }
-        }, 1000);
-      }
+      // console.log(`👤 New member joined: ${newUsername}. Waiting for them to initiate WebRTC connection...`);
+      // Don't call connectToPeer here - the new joiner will connect to us
     };
 
     // Handle member leaving - cleanup their stream
