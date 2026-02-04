@@ -93,6 +93,11 @@ class SocketService {
     this.socket.emit('next-turn', { roomId });
   }
 
+  // End room (host only) - deletes room from database
+  endRoom(roomId) {
+    this.socket.emit('end-room', { roomId });
+  }
+
   // Legacy methods (for compatibility)
   selectTruth(roomId) {
     this.socket.emit('select-truth', { roomId });

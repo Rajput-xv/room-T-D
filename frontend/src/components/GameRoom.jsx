@@ -26,7 +26,8 @@ export default function GameRoom({
   gamePhase,
   currentChoice,
   turnOrder,
-  onLeave, 
+  onLeave,
+  onEndRoom,
   onSendMessage, 
   onSpin, 
   onChooseTruthOrDare,
@@ -221,6 +222,17 @@ export default function GameRoom({
             >
               Leave
             </Button>
+            {isHost && (
+              <Button 
+                variant="contained" 
+                color="error"
+                onClick={onEndRoom}
+                size="small"
+                sx={{ bgcolor: 'darkred' }}
+              >
+                End Room
+              </Button>
+            )}
           </Stack>
         </Stack>
       </Paper>

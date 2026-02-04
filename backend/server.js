@@ -116,6 +116,8 @@ socketHandler(io);
 
 // Inactivity checker - runs every 30 seconds
 let inactivityInterval;
+let staleRoomCleanupInterval;
+
 const startInactivityChecker = () => {
   inactivityInterval = setInterval(async () => {
     try {
@@ -124,6 +126,18 @@ const startInactivityChecker = () => {
       console.error('Inactivity check error:', err);
     }
   }, 30000);
+};
+
+// Stale room cleanup - runs every 5 minutes
+const startStaleRoomCleanup = () => {
+  staleRoomCleanupInterval = setInterval(async () => {
+    try {
+      // Clean up rooms older than 1 hour with no activity
+      await RoomService.cleanupStaleRooms(60 * 60 * 1000);
+    } catch (err) {
+      console.error('Stale room cleanup error:', err);
+    }
+  }, 5 * 60 * 1000);
 };
 
 // Graceful shutdown handling
@@ -138,6 +152,9 @@ const gracefulShutdown = async (signal) => {
   // Clear intervals
   if (inactivityInterval) {
     clearInterval(inactivityInterval);
+  }
+  if (staleRoomCleanupInterval) {
+    clearInterval(staleRoomCleanupInterval);
   }
   
   // Close all socket connections
@@ -173,7 +190,12 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start server
 const startServer = async () => {
   await connectWithRetry();
+  
+  // Clean up all stale rooms from previous server sessions
+  await RoomService.cleanupAllRooms();
+  
   startInactivityChecker();
+  startStaleRoomCleanup();
   
   server.listen(PORT, () => {
     // console.log(`\n🎮 Truth-Dare Game Backend`);

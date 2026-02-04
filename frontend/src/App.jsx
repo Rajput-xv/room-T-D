@@ -104,6 +104,12 @@ export default function App() {
       handleLeaveRoom();
     });
 
+    // Room ended by host - room deleted from database
+    socket.on('room-ended', ({ message }) => {
+      showSnackbar(message || 'Room has ended', 'warning');
+      handleLeaveRoom();
+    });
+
     // Game events
     socket.on('game-started', ({ room, gameState }) => {
       setCurrentRoom(room);
@@ -248,7 +254,17 @@ export default function App() {
     setCurrentPlayer(null);
     setTruthDare(null);
     setSpinResult(null);
+    setGamePhase('waiting');
+    setCurrentChoice(null);
+    setTurnOrder([]);
     setView('home');
+  };
+
+  // End room (host only) - deletes room from database
+  const handleEndRoom = () => {
+    if (currentRoom) {
+      socketService.endRoom(currentRoom.roomId);
+    }
   };
 
   const handleSendMessage = (message) => {
@@ -317,6 +333,7 @@ export default function App() {
               currentChoice={currentChoice}
               turnOrder={turnOrder}
               onLeave={handleLeaveRoom}
+              onEndRoom={handleEndRoom}
               onSendMessage={handleSendMessage}
               onSpin={handleSpin}
               onChooseTruthOrDare={handleChooseTruthOrDare}

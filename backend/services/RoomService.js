@@ -293,6 +293,28 @@ class RoomService {
   static async getRoom(roomId) {
     return Room.findOne({ roomId });
   }
+
+  // Delete a specific room
+  static async deleteRoom(roomId) {
+    await Room.deleteOne({ roomId });
+  }
+
+  // Clean up all rooms (called on server start to remove stale rooms)
+  static async cleanupAllRooms() {
+    const result = await Room.deleteMany({});
+    console.log(`🧹 Cleaned up ${result.deletedCount} stale rooms from database`);
+    return result.deletedCount;
+  }
+
+  // Clean up stale rooms (rooms older than specified time with no activity)
+  static async cleanupStaleRooms(maxAgeMs = 24 * 60 * 60 * 1000) {
+    const cutoffTime = new Date(Date.now() - maxAgeMs);
+    const result = await Room.deleteMany({ createdAt: { $lt: cutoffTime } });
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${result.deletedCount} stale rooms older than ${maxAgeMs / 1000 / 60} minutes`);
+    }
+    return result.deletedCount;
+  }
 }
 
 module.exports = RoomService;

@@ -189,6 +189,31 @@ module.exports = function (io) {
       }
     });
 
+    // End room - host can end and delete the room (kicks everyone)
+    socket.on('end-room', async ({ roomId }) => {
+      try {
+        const room = await RoomService.getRoom(roomId);
+        if (!room) throw new Error('Room not found');
+        if (room.host !== socket.username) throw new Error('Only host can end the room');
+        
+        // Notify all members that room is ending
+        io.to(roomId).emit('room-ended', { message: 'Host has ended the room' });
+        
+        // Delete room from database
+        await RoomService.deleteRoom(roomId);
+        
+        // Make all sockets leave the room
+        const sockets = await io.in(roomId).fetchSockets();
+        for (const s of sockets) {
+          s.leave(roomId);
+          s.roomId = null;
+          s.username = null;
+        }
+      } catch (err) {
+        io.to(socket.id).emit('error', { message: err.message });
+      }
+    });
+
     // Select truth
     socket.on('select-truth', ({ roomId }) => {
       const question = ContentService.getTruth();
