@@ -40,9 +40,6 @@ class WebRTCService {
         } : false
       });
       
-      console.log('Local stream initialized with tracks:', 
-        this.localStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
-      
       // Notify listeners about local stream
       this.onLocalStreamCallbacks.forEach(cb => cb(this.localStream));
       
@@ -51,7 +48,6 @@ class WebRTCService {
       console.error('Error accessing media devices:', err);
       // Try audio only if video fails
       if (videoEnabled) {
-        console.log('Falling back to audio only...');
         return this.initLocalStream(false, audioEnabled);
       }
       throw err;
@@ -89,8 +85,6 @@ class WebRTCService {
       this.peers.delete(peerId);
     }
 
-    console.log(`Creating peer connection to ${peerId}, initiator: ${initiator}`);
-
     const peer = new SimplePeer({
       initiator,
       stream: this.localStream,
@@ -125,27 +119,22 @@ class WebRTCService {
 
     // Handle ALL signal events (offers, answers, AND ICE candidates)
     peer.on('signal', (data) => {
-      console.log(`Signal from peer ${peerId}:`, data.type || 'ice-candidate');
       // Send every signal to the remote peer via socket
       this.onSignalCallbacks.forEach(cb => cb(peerId, data));
     });
 
     peer.on('stream', (remoteStream) => {
-      console.log(`Received stream from peer: ${peerId}`, 
-        remoteStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
       this.onStreamCallbacks.forEach(cb => cb(peerId, remoteStream));
     });
 
     peer.on('track', (track, stream) => {
-      console.log(`Received track from peer ${peerId}: ${track.kind}`);
+      // Track received
     });
 
     peer.on('connect', () => {
-      console.log(`Peer ${peerId} connected!`);
       // Process any pending ICE candidates
       if (this.pendingCandidates.has(peerId)) {
         const candidates = this.pendingCandidates.get(peerId);
-        console.log(`Processing ${candidates.length} pending candidates for ${peerId}`);
         candidates.forEach(candidate => {
           try {
             peer.signal(candidate);
@@ -163,13 +152,12 @@ class WebRTCService {
     });
 
     peer.on('close', () => {
-      console.log(`Peer ${peerId} connection closed`);
       this.cleanupPeer(peerId);
       this.onPeerDisconnectCallbacks.forEach(cb => cb(peerId));
     });
 
     peer.on('iceStateChange', (state) => {
-      console.log(`Peer ${peerId} ICE state: ${state}`);
+      // ICE state changed
     });
 
     this.peers.set(peerId, peer);
@@ -197,8 +185,6 @@ class WebRTCService {
 
   // Handle incoming signal (offer, answer, or ICE candidate)
   handleSignal(peerId, signal) {
-    console.log(`Handling signal from ${peerId}:`, signal.type || 'ice-candidate');
-    
     let peer = this.peers.get(peerId);
     
     // If we receive an offer, we need to create a non-initiator peer
@@ -206,7 +192,6 @@ class WebRTCService {
       // If peer exists and we also sent an offer (glare condition), 
       // the peer with larger socket ID wins as initiator
       if (peer && !peer.destroyed) {
-        console.log('Glare detected, recreating peer as non-initiator');
         peer.destroy();
         this.peers.delete(peerId);
       }
@@ -216,7 +201,6 @@ class WebRTCService {
     if (!peer) {
       // For ICE candidates that arrive before the peer is created, queue them
       if (signal.candidate || signal.type === 'candidate') {
-        console.log(`Queuing ICE candidate for ${peerId}`);
         if (!this.pendingCandidates.has(peerId)) {
           this.pendingCandidates.set(peerId, []);
         }
@@ -246,7 +230,6 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
         track.enabled = enabled;
-        console.log(`Mic ${enabled ? 'enabled' : 'disabled'}`);
       });
     }
   }
@@ -256,7 +239,6 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
         track.enabled = enabled;
-        console.log(`Video ${enabled ? 'enabled' : 'disabled'}`);
       });
     }
   }
@@ -302,7 +284,6 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
         track.stop();
-        console.log(`Stopped ${track.kind} track`);
       });
       this.localStream = null;
     }
@@ -310,7 +291,6 @@ class WebRTCService {
 
   // Cleanup everything
   cleanup() {
-    console.log('Cleaning up WebRTC service');
     this.closeAllConnections();
     this.stopLocalStream();
     this.onStreamCallbacks = [];

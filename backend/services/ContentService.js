@@ -12,7 +12,6 @@ const loadContent = () => {
     
     if (fs.existsSync(truthsPath)) {
       truths = JSON.parse(fs.readFileSync(truthsPath, 'utf-8'));
-      console.log(`✅ Loaded ${truths.length} truths`);
     } else {
       console.warn('⚠️ truths.json not found, using defaults');
       truths = [
@@ -31,7 +30,6 @@ const loadContent = () => {
     
     if (fs.existsSync(daresPath)) {
       dares = JSON.parse(fs.readFileSync(daresPath, 'utf-8'));
-      console.log(`✅ Loaded ${dares.length} dares`);
     } else {
       console.warn('⚠️ dares.json not found, using defaults');
       dares = [
@@ -95,8 +93,6 @@ class ContentService {
     // Get the correct content array based on type
     const content = type === 'truth' ? [...truths] : [...dares];
     
-    console.log(`Getting content for type: ${type}, wheelNumber: ${wheelNumber}, total items: ${content.length}`);
-    
     if (content.length === 0) {
       console.warn(`No content found for type: ${type}`);
       return type === 'truth' ? 'What is your biggest fear?' : 'Do 10 push-ups';
@@ -105,9 +101,7 @@ class ContentService {
     // If 10 or fewer items, just use wheelNumber directly
     if (content.length <= 10) {
       const index = Math.min(wheelNumber - 1, content.length - 1);
-      const result = content[index];
-      console.log(`Direct index ${index}: "${result}"`);
-      return result;
+      return content[index];
     }
     
     // Group content into chunks of 10
@@ -123,10 +117,7 @@ class ContentService {
     // Use wheelNumber (1-10) to get item from selected group
     // wheelNumber 1 = index 0, wheelNumber 10 = index 9
     const index = Math.min(wheelNumber - 1, selectedGroup.length - 1);
-    const result = selectedGroup[index];
-    
-    console.log(`Group ${randomGroupIndex}, index ${index}: "${result}"`);
-    return result;
+    return selectedGroup[index];
   }
 
   static getTruthsCount() {

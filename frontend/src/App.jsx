@@ -141,7 +141,6 @@ export default function App() {
     });
 
     socket.on('choice-made', ({ username, choice, gamePhase }) => {
-      console.log(`Choice made: ${username} chose ${choice}, gamePhase=${gamePhase}`);
       setCurrentChoice(choice);
       setGamePhase(gamePhase);
       showSnackbar(`${username} chose ${choice}!`, 'info');
@@ -152,7 +151,6 @@ export default function App() {
     });
 
     socket.on('wheel-stopped', ({ result, content, type }) => {
-      console.log(`Wheel stopped: type=${type}, result=${result}, content="${content}"`);
       setIsSpinning(false);
       setSpinResult(result);
       setTruthDare({ type, content });
@@ -160,7 +158,6 @@ export default function App() {
     });
 
     socket.on('turn-changed', ({ currentPlayer, gamePhase, currentTurnIndex, turnOrder }) => {
-      console.log(`Turn changed: player=${currentPlayer}, phase=${gamePhase}`);
       setCurrentPlayer(currentPlayer);
       setGamePhase(gamePhase);
       setTurnOrder(turnOrder);

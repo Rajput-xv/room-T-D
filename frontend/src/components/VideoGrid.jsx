@@ -16,18 +16,13 @@ function VideoCell({ member, stream, isLocal = false, localStream = null }) {
     const mediaStream = isLocal ? localStream : stream;
     
     if (videoRef.current && mediaStream) {
-      console.log(`Setting up video for ${member.username}:`, {
-        isLocal,
-        tracks: mediaStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState }))
-      });
-      
       // Set srcObject
       videoRef.current.srcObject = mediaStream;
       
       // For remote streams, ensure video plays
       if (!isLocal) {
         videoRef.current.play().catch(err => {
-          console.log('Autoplay blocked, user interaction needed:', err);
+          // Autoplay blocked, requires user interaction
         });
       }
       
@@ -42,7 +37,6 @@ function VideoCell({ member, stream, isLocal = false, localStream = null }) {
         const tracks = mediaStream.getVideoTracks();
         const active = tracks.length > 0 && tracks[0]?.enabled && tracks[0]?.readyState === 'live';
         setHasVideo(active);
-        console.log(`Track change for ${member.username}:`, active);
       };
       
       mediaStream.addEventListener('addtrack', handleTrackChange);
@@ -216,12 +210,12 @@ export default function VideoGrid({ members = [], streams = {}, localStream = nu
   const otherMembers = members.filter(m => m.username !== currentUsername);
 
   // Debug logging
-  console.log('VideoGrid render:', {
-    memberCount: members.length,
-    streamKeys: Object.keys(streams),
-    hasLocalStream: !!localStream,
-    otherMembers: otherMembers.map(m => ({ username: m.username, socketId: m.socketId }))
-  });
+  // console.log('VideoGrid render:', {
+  //   memberCount: members.length,
+  //   streamKeys: Object.keys(streams),
+  //   hasLocalStream: !!localStream,
+  //   otherMembers: otherMembers.map(m => ({ username: m.username, socketId: m.socketId }))
+  // });
 
   return (
     <Box>
@@ -245,7 +239,7 @@ export default function VideoGrid({ members = [], streams = {}, localStream = nu
         {/* Other participants */}
         {otherMembers.map((member) => {
           const memberStream = streams[member.socketId];
-          console.log(`Stream for ${member.username} (${member.socketId}):`, memberStream ? 'exists' : 'missing');
+          // console.log(`Stream for ${member.username} (${member.socketId}):`, memberStream ? 'exists' : 'missing');
           return (
             <Grid item xs={6} sm={4} md={3} key={member.username}>
               <VideoCell 

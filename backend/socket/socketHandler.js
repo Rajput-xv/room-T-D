@@ -166,14 +166,11 @@ module.exports = function (io) {
             
             // Get content using the CURRENT choice (truth or dare)
             const currentChoice = currentRoom.currentChoice;
-            console.log(`Spin wheel: Player ${socket.username}, Choice: ${currentChoice}, Number: ${wheelNumber}`);
             
             const selectedContent = ContentService.getContentByWheelNumber(
               currentChoice, 
               wheelNumber
             );
-            
-            console.log(`Selected content for ${currentChoice}: "${selectedContent}"`);
             
             await RoomService.setSpinResult(roomId, wheelNumber, selectedContent);
             
@@ -285,17 +282,14 @@ module.exports = function (io) {
 
     // WebRTC signaling - these MUST be reliable for video/audio to work
     socket.on('webrtc-offer', ({ roomId, offer, to }) => {
-      console.log(`WebRTC offer from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-offer', { from: socket.id, offer });
     });
 
     socket.on('webrtc-answer', ({ roomId, answer, to }) => {
-      console.log(`WebRTC answer from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-answer', { from: socket.id, answer });
     });
 
     socket.on('webrtc-ice-candidate', ({ roomId, candidate, to }) => {
-      console.log(`WebRTC ICE candidate from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-ice-candidate', { from: socket.id, candidate });
     });
 

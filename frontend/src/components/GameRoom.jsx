@@ -75,7 +75,6 @@ export default function GameRoom({
         
         // Listen for remote streams
         webrtcService.onStream((peerId, stream) => {
-          console.log('Received remote stream from:', peerId);
           if (mounted) {
             setStreams(prev => ({ ...prev, [peerId]: stream }));
           }
@@ -83,7 +82,6 @@ export default function GameRoom({
 
         // Listen for peer disconnections
         webrtcService.onPeerDisconnect((peerId) => {
-          console.log('Peer disconnected:', peerId);
           if (mounted) {
             setStreams(prev => {
               const newStreams = { ...prev };
@@ -95,7 +93,6 @@ export default function GameRoom({
 
         // Set up signaling callback - this sends ALL signals (offer/answer/ICE) via socket
         webrtcService.setSignalCallback((peerId, signal) => {
-          console.log('Sending signal to', peerId, signal.type || 'ice-candidate');
           if (signal.type === 'offer') {
             socketService.sendOffer(room.roomId, signal, peerId);
           } else if (signal.type === 'answer') {
@@ -108,17 +105,14 @@ export default function GameRoom({
 
         // Handle incoming WebRTC signals
         const handleOffer = ({ from, offer }) => {
-          console.log('Received offer from:', from);
           webrtcService.handleSignal(from, offer);
         };
 
         const handleAnswer = ({ from, answer }) => {
-          console.log('Received answer from:', from);
           webrtcService.handleSignal(from, answer);
         };
 
         const handleIceCandidate = ({ from, candidate }) => {
-          console.log('Received ICE candidate from:', from);
           webrtcService.handleSignal(from, candidate);
         };
 
@@ -132,7 +126,6 @@ export default function GameRoom({
           const currentMembers = membersRef.current;
           for (const member of currentMembers) {
             if (member.username !== username && member.socketId) {
-              console.log('Initiating connection to:', member.username, member.socketId);
               webrtcService.connectToPeer(member.socketId);
             }
           }
@@ -158,7 +151,6 @@ export default function GameRoom({
     const handleNewMember = ({ username: newUsername, members: newMembers }) => {
       const newMember = newMembers.find(m => m.username === newUsername);
       if (newMember && newUsername !== username && newMember.socketId) {
-        console.log('New member joined, initiating connection:', newUsername, newMember.socketId);
         setTimeout(() => {
           if (mounted) {
             webrtcService.connectToPeer(newMember.socketId);
@@ -169,7 +161,6 @@ export default function GameRoom({
 
     // Handle member leaving - cleanup their stream
     const handleMemberLeft = ({ username: leftUsername, members: remainingMembers }) => {
-      console.log('Member left:', leftUsername);
       // Find which socketId belonged to this user by checking what's NOT in remaining members
       if (mounted) {
         setStreams(prev => {
@@ -214,7 +205,6 @@ export default function GameRoom({
       const currentMembers = membersRef.current;
       for (const member of currentMembers) {
         if (member.username !== username && member.socketId) {
-          console.log('Retrying connection to:', member.username);
           webrtcService.connectToPeer(member.socketId);
         }
       }
