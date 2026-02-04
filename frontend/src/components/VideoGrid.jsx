@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Box, Grid, Paper, Typography, Avatar, IconButton, Tooltip } from '@mui/material';
+import { Box, Grid, Paper, Typography, Avatar, IconButton, Tooltip, CircularProgress } from '@mui/material';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import MicIcon from '@mui/icons-material/Mic';
@@ -10,39 +10,72 @@ import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 function VideoCell({ member, stream, isLocal = false, localStream = null }) {
   const videoRef = useRef(null);
   const [hasVideo, setHasVideo] = useState(false);
+  const [streamReady, setStreamReady] = useState(false);
 
   useEffect(() => {
     const mediaStream = isLocal ? localStream : stream;
     
     if (videoRef.current && mediaStream) {
+      console.log(`Setting up video for ${member.username}:`, {
+        isLocal,
+        tracks: mediaStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState }))
+      });
+      
+      // Set srcObject
       videoRef.current.srcObject = mediaStream;
+      
+      // For remote streams, ensure video plays
+      if (!isLocal) {
+        videoRef.current.play().catch(err => {
+          console.log('Autoplay blocked, user interaction needed:', err);
+        });
+      }
       
       // Check if stream has video track
       const videoTracks = mediaStream.getVideoTracks();
-      setHasVideo(videoTracks.length > 0 && videoTracks[0].enabled);
+      const hasActiveVideo = videoTracks.length > 0 && videoTracks[0].enabled && videoTracks[0].readyState === 'live';
+      setHasVideo(hasActiveVideo);
+      setStreamReady(true);
       
       // Listen for track changes
       const handleTrackChange = () => {
         const tracks = mediaStream.getVideoTracks();
-        setHasVideo(tracks.length > 0 && tracks[0]?.enabled);
+        const active = tracks.length > 0 && tracks[0]?.enabled && tracks[0]?.readyState === 'live';
+        setHasVideo(active);
+        console.log(`Track change for ${member.username}:`, active);
       };
       
       mediaStream.addEventListener('addtrack', handleTrackChange);
       mediaStream.addEventListener('removetrack', handleTrackChange);
       
+      // Also listen for track ended events
+      mediaStream.getTracks().forEach(track => {
+        track.addEventListener('ended', handleTrackChange);
+        track.addEventListener('mute', handleTrackChange);
+        track.addEventListener('unmute', handleTrackChange);
+      });
+      
       return () => {
         mediaStream.removeEventListener('addtrack', handleTrackChange);
         mediaStream.removeEventListener('removetrack', handleTrackChange);
+        mediaStream.getTracks().forEach(track => {
+          track.removeEventListener('ended', handleTrackChange);
+          track.removeEventListener('mute', handleTrackChange);
+          track.removeEventListener('unmute', handleTrackChange);
+        });
       };
+    } else {
+      setStreamReady(false);
+      setHasVideo(false);
     }
-  }, [stream, localStream, isLocal]);
+  }, [stream, localStream, isLocal, member.username]);
 
   // Update video visibility when member toggles video
   useEffect(() => {
     setHasVideo(member.videoEnabled);
   }, [member.videoEnabled]);
 
-  const showVideo = hasVideo && member.videoEnabled;
+  const showVideo = hasVideo && member.videoEnabled && streamReady;
 
   return (
     <Paper 
@@ -57,12 +90,12 @@ function VideoCell({ member, stream, isLocal = false, localStream = null }) {
         alignItems: 'center'
       }}
     >
-      {/* Video element */}
+      {/* Video element - IMPORTANT: muted only for local to prevent echo, NOT for remote */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isLocal} // Mute local video to prevent echo
+        muted={isLocal} // Only mute local video to prevent echo, remote videos need audio!
         style={{
           position: 'absolute',
           top: 0,
@@ -75,20 +108,43 @@ function VideoCell({ member, stream, isLocal = false, localStream = null }) {
         }}
       />
       
+      {/* Hidden audio element for when video is not showing but we still need audio */}
+      {!isLocal && !showVideo && streamReady && (
+        <audio
+          autoPlay
+          playsInline
+          ref={el => {
+            if (el && stream) {
+              el.srcObject = stream;
+            }
+          }}
+          style={{ display: 'none' }}
+        />
+      )}
+      
       {/* Avatar fallback when video is off */}
       {!showVideo && (
-        <Avatar 
-          sx={{ 
-            width: 80, 
-            height: 80, 
-            bgcolor: isLocal ? 'secondary.main' : 'primary.main',
-            fontSize: '2rem',
-            border: '3px solid',
-            borderColor: isLocal ? 'secondary.light' : 'primary.light'
-          }}
-        >
-          {member.username.charAt(0).toUpperCase()}
-        </Avatar>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+          <Avatar 
+            sx={{ 
+              width: 80, 
+              height: 80, 
+              bgcolor: isLocal ? 'secondary.main' : 'primary.main',
+              fontSize: '2rem',
+              border: '3px solid',
+              borderColor: isLocal ? 'secondary.light' : 'primary.light'
+            }}
+          >
+            {member.username.charAt(0).toUpperCase()}
+          </Avatar>
+          {/* Show connecting indicator for remote users without stream */}
+          {!isLocal && !streamReady && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <CircularProgress size={12} />
+              <Typography variant="caption" color="text.secondary">Connecting...</Typography>
+            </Box>
+          )}
+        </Box>
       )}
       
       {/* Username overlay */}
@@ -159,6 +215,14 @@ export default function VideoGrid({ members = [], streams = {}, localStream = nu
   const localMember = members.find(m => m.username === currentUsername);
   const otherMembers = members.filter(m => m.username !== currentUsername);
 
+  // Debug logging
+  console.log('VideoGrid render:', {
+    memberCount: members.length,
+    streamKeys: Object.keys(streams),
+    hasLocalStream: !!localStream,
+    otherMembers: otherMembers.map(m => ({ username: m.username, socketId: m.socketId }))
+  });
+
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -179,15 +243,19 @@ export default function VideoGrid({ members = [], streams = {}, localStream = nu
         )}
         
         {/* Other participants */}
-        {otherMembers.map((member) => (
-          <Grid item xs={6} sm={4} md={3} key={member.username}>
-            <VideoCell 
-              member={member} 
-              stream={streams[member.socketId]} 
-              isLocal={false}
-            />
-          </Grid>
-        ))}
+        {otherMembers.map((member) => {
+          const memberStream = streams[member.socketId];
+          console.log(`Stream for ${member.username} (${member.socketId}):`, memberStream ? 'exists' : 'missing');
+          return (
+            <Grid item xs={6} sm={4} md={3} key={member.username}>
+              <VideoCell 
+                member={member} 
+                stream={memberStream} 
+                isLocal={false}
+              />
+            </Grid>
+          );
+        })}
       </Grid>
     </Box>
   );

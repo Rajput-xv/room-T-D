@@ -4,8 +4,21 @@ class WebRTCService {
   constructor() {
     this.localStream = null;
     this.peers = new Map(); // peerId -> SimplePeer instance
+    this.pendingCandidates = new Map(); // peerId -> array of ICE candidates
     this.onStreamCallbacks = [];
     this.onLocalStreamCallbacks = [];
+    this.onSignalCallbacks = []; // Callback to send signals via socket
+    this.onPeerDisconnectCallbacks = [];
+  }
+
+  // Set callback for when we need to send signaling data
+  setSignalCallback(callback) {
+    this.onSignalCallbacks.push(callback);
+  }
+
+  // Clear signal callbacks
+  clearSignalCallbacks() {
+    this.onSignalCallbacks = [];
   }
 
   // Initialize local audio + video stream
@@ -15,13 +28,20 @@ class WebRTCService {
       this.stopLocalStream();
       
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioEnabled,
+        audio: audioEnabled ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } : false,
         video: videoEnabled ? {
           width: { ideal: 640, max: 1280 },
           height: { ideal: 480, max: 720 },
           frameRate: { ideal: 24, max: 30 }
         } : false
       });
+      
+      console.log('Local stream initialized with tracks:', 
+        this.localStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
       
       // Notify listeners about local stream
       this.onLocalStreamCallbacks.forEach(cb => cb(this.localStream));
@@ -31,7 +51,7 @@ class WebRTCService {
       console.error('Error accessing media devices:', err);
       // Try audio only if video fails
       if (videoEnabled) {
-        // console.log('Falling back to audio only...');
+        console.log('Falling back to audio only...');
         return this.initLocalStream(false, audioEnabled);
       }
       throw err;
@@ -52,101 +72,172 @@ class WebRTCService {
     }
   }
 
-  // Create peer connection as initiator
+  // Register callback for peer disconnect
+  onPeerDisconnect(callback) {
+    this.onPeerDisconnectCallbacks.push(callback);
+  }
+
+  // Create peer connection
   createPeerConnection(peerId, initiator = true) {
+    // If peer already exists and is not destroyed, return it
     if (this.peers.has(peerId)) {
-      return this.peers.get(peerId);
+      const existingPeer = this.peers.get(peerId);
+      if (!existingPeer.destroyed) {
+        return existingPeer;
+      }
+      // Clean up destroyed peer
+      this.peers.delete(peerId);
     }
+
+    console.log(`Creating peer connection to ${peerId}, initiator: ${initiator}`);
 
     const peer = new SimplePeer({
       initiator,
       stream: this.localStream,
-      trickle: true,
+      trickle: true, // Enable ICE trickle for faster connections
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          // Free TURN servers for NAT traversal
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ],
+        iceCandidatePoolSize: 10
       }
     });
 
+    // Handle ALL signal events (offers, answers, AND ICE candidates)
+    peer.on('signal', (data) => {
+      console.log(`Signal from peer ${peerId}:`, data.type || 'ice-candidate');
+      // Send every signal to the remote peer via socket
+      this.onSignalCallbacks.forEach(cb => cb(peerId, data));
+    });
+
     peer.on('stream', (remoteStream) => {
-      // console.log(`Received stream from peer: ${peerId}`);
+      console.log(`Received stream from peer: ${peerId}`, 
+        remoteStream.getTracks().map(t => `${t.kind}: ${t.enabled}`));
       this.onStreamCallbacks.forEach(cb => cb(peerId, remoteStream));
     });
 
+    peer.on('track', (track, stream) => {
+      console.log(`Received track from peer ${peerId}: ${track.kind}`);
+    });
+
+    peer.on('connect', () => {
+      console.log(`Peer ${peerId} connected!`);
+      // Process any pending ICE candidates
+      if (this.pendingCandidates.has(peerId)) {
+        const candidates = this.pendingCandidates.get(peerId);
+        console.log(`Processing ${candidates.length} pending candidates for ${peerId}`);
+        candidates.forEach(candidate => {
+          try {
+            peer.signal(candidate);
+          } catch (e) {
+            console.error('Error adding pending candidate:', e);
+          }
+        });
+        this.pendingCandidates.delete(peerId);
+      }
+    });
+
     peer.on('error', (err) => {
-      console.error(`Peer ${peerId} error:`, err);
-      this.peers.delete(peerId);
+      console.error(`Peer ${peerId} error:`, err.message);
+      this.cleanupPeer(peerId);
     });
 
     peer.on('close', () => {
-      // console.log(`Peer ${peerId} connection closed`);
-      this.peers.delete(peerId);
+      console.log(`Peer ${peerId} connection closed`);
+      this.cleanupPeer(peerId);
+      this.onPeerDisconnectCallbacks.forEach(cb => cb(peerId));
+    });
+
+    peer.on('iceStateChange', (state) => {
+      console.log(`Peer ${peerId} ICE state: ${state}`);
     });
 
     this.peers.set(peerId, peer);
     return peer;
   }
 
-  // Create offer (returns signal data via peer.on('signal'))
-  createOffer(peerId) {
-    const peer = this.createPeerConnection(peerId, true);
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Offer timeout'));
-      }, 10000);
-      
-      peer.on('signal', (data) => {
-        if (data.type === 'offer' || data.candidate) {
-          clearTimeout(timeout);
-          resolve(data);
-        }
-      });
-    });
-  }
-
-  // Handle incoming offer and create answer
-  handleOffer(peerId, offer) {
-    const peer = this.createPeerConnection(peerId, false);
-    peer.signal(offer);
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Answer timeout'));
-      }, 10000);
-      
-      peer.on('signal', (data) => {
-        if (data.type === 'answer') {
-          clearTimeout(timeout);
-          resolve(data);
-        }
-      });
-    });
-  }
-
-  // Handle answer from remote peer
-  handleAnswer(peerId, answer) {
+  // Clean up a specific peer
+  cleanupPeer(peerId) {
     const peer = this.peers.get(peerId);
-    if (peer) {
-      peer.signal(answer);
+    if (peer && !peer.destroyed) {
+      peer.destroy();
     }
+    this.peers.delete(peerId);
+    this.pendingCandidates.delete(peerId);
   }
 
-  // Handle ICE candidate
-  handleIceCandidate(peerId, candidate) {
-    const peer = this.peers.get(peerId);
-    if (peer) {
-      peer.signal(candidate);
+  // Initiate connection to a peer (as initiator)
+  connectToPeer(peerId) {
+    if (!this.localStream) {
+      console.error('Cannot connect to peer: no local stream');
+      return null;
     }
+    return this.createPeerConnection(peerId, true);
   }
 
-  // Toggle audio (speaker/output)
-  toggleAudio(enabled) {
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach(track => {
-        track.enabled = enabled;
-      });
+  // Handle incoming signal (offer, answer, or ICE candidate)
+  handleSignal(peerId, signal) {
+    console.log(`Handling signal from ${peerId}:`, signal.type || 'ice-candidate');
+    
+    let peer = this.peers.get(peerId);
+    
+    // If we receive an offer, we need to create a non-initiator peer
+    if (signal.type === 'offer') {
+      // If peer exists and we also sent an offer (glare condition), 
+      // the peer with larger socket ID wins as initiator
+      if (peer && !peer.destroyed) {
+        console.log('Glare detected, recreating peer as non-initiator');
+        peer.destroy();
+        this.peers.delete(peerId);
+      }
+      peer = this.createPeerConnection(peerId, false);
+    }
+    
+    if (!peer) {
+      // For ICE candidates that arrive before the peer is created, queue them
+      if (signal.candidate || signal.type === 'candidate') {
+        console.log(`Queuing ICE candidate for ${peerId}`);
+        if (!this.pendingCandidates.has(peerId)) {
+          this.pendingCandidates.set(peerId, []);
+        }
+        this.pendingCandidates.get(peerId).push(signal);
+        return;
+      }
+      console.error(`No peer connection for ${peerId}`);
+      return;
+    }
+    
+    try {
+      peer.signal(signal);
+    } catch (err) {
+      console.error(`Error signaling peer ${peerId}:`, err);
+      // If the signal fails, queue ICE candidates
+      if (signal.candidate || signal.type === 'candidate') {
+        if (!this.pendingCandidates.has(peerId)) {
+          this.pendingCandidates.set(peerId, []);
+        }
+        this.pendingCandidates.get(peerId).push(signal);
+      }
     }
   }
 
@@ -155,6 +246,7 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
         track.enabled = enabled;
+        console.log(`Mic ${enabled ? 'enabled' : 'disabled'}`);
       });
     }
   }
@@ -164,6 +256,7 @@ class WebRTCService {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
         track.enabled = enabled;
+        console.log(`Video ${enabled ? 'enabled' : 'disabled'}`);
       });
     }
   }
@@ -190,35 +283,49 @@ class WebRTCService {
 
   // Close specific peer connection
   closeConnection(peerId) {
-    const peer = this.peers.get(peerId);
-    if (peer) {
-      peer.destroy();
-      this.peers.delete(peerId);
-    }
+    this.cleanupPeer(peerId);
   }
 
   // Close all connections
   closeAllConnections() {
-    this.peers.forEach((peer) => {
-      peer.destroy();
+    this.peers.forEach((peer, peerId) => {
+      if (!peer.destroyed) {
+        peer.destroy();
+      }
     });
     this.peers.clear();
+    this.pendingCandidates.clear();
   }
 
   // Stop local stream
   stopLocalStream() {
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`Stopped ${track.kind} track`);
+      });
       this.localStream = null;
     }
   }
 
   // Cleanup everything
   cleanup() {
+    console.log('Cleaning up WebRTC service');
     this.closeAllConnections();
     this.stopLocalStream();
     this.onStreamCallbacks = [];
     this.onLocalStreamCallbacks = [];
+    this.onSignalCallbacks = [];
+    this.onPeerDisconnectCallbacks = [];
+  }
+
+  // Get connection stats for debugging
+  getStats() {
+    return {
+      peers: Array.from(this.peers.keys()),
+      hasLocalStream: !!this.localStream,
+      localTracks: this.localStream?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })) || []
+    };
   }
 }
 

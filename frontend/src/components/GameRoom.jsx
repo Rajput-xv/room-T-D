@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Paper, Typography, Button, Grid, Stack, List, ListItem, ListItemText, Chip, Alert, CircularProgress } from '@mui/material';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
@@ -42,121 +42,194 @@ export default function GameRoom({
   const [localStream, setLocalStream] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [mediaError, setMediaError] = useState(null);
+  const [webrtcInitialized, setWebrtcInitialized] = useState(false);
 
   const isHost = room.host === username;
   const isCurrentPlayer = currentPlayer === username;
 
-  // Initialize WebRTC with video and audio
-  const initWebRTC = useCallback(async () => {
-    setIsInitializing(true);
-    setMediaError(null);
+  // Store members ref to avoid closure issues
+  const membersRef = React.useRef(members);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
+  // Initialize WebRTC with video and audio - runs ONCE on mount
+  useEffect(() => {
+    let mounted = true;
     
-    try {
-      // Initialize local stream with video AND audio
-      const stream = await webrtcService.initLocalStream(true, true);
-      setLocalStream(stream);
+    const initWebRTC = async () => {
+      setIsInitializing(true);
+      setMediaError(null);
       
-      // Listen for local stream updates
-      webrtcService.onLocalStream((stream) => {
+      try {
+        // Initialize local stream with video AND audio
+        const stream = await webrtcService.initLocalStream(true, true);
+        if (!mounted) return;
+        
         setLocalStream(stream);
-      });
-      
-      // Listen for remote streams
-      webrtcService.onStream((peerId, stream) => {
-        // console.log('Received remote stream from:', peerId);
-        setStreams(prev => ({ ...prev, [peerId]: stream }));
-      });
+        
+        // Listen for local stream updates
+        webrtcService.onLocalStream((stream) => {
+          if (mounted) setLocalStream(stream);
+        });
+        
+        // Listen for remote streams
+        webrtcService.onStream((peerId, stream) => {
+          console.log('Received remote stream from:', peerId);
+          if (mounted) {
+            setStreams(prev => ({ ...prev, [peerId]: stream }));
+          }
+        });
 
-      // Set up signaling handlers
-      socketService.on('webrtc-offer', async ({ from, offer }) => {
-        try {
-          const answer = await webrtcService.handleOffer(from, offer);
-          socketService.sendAnswer(room.roomId, answer, from);
-        } catch (err) {
-          console.error('Error handling offer:', err);
-        }
-      });
+        // Listen for peer disconnections
+        webrtcService.onPeerDisconnect((peerId) => {
+          console.log('Peer disconnected:', peerId);
+          if (mounted) {
+            setStreams(prev => {
+              const newStreams = { ...prev };
+              delete newStreams[peerId];
+              return newStreams;
+            });
+          }
+        });
 
-      socketService.on('webrtc-answer', ({ from, answer }) => {
-        webrtcService.handleAnswer(from, answer);
-      });
+        // Set up signaling callback - this sends ALL signals (offer/answer/ICE) via socket
+        webrtcService.setSignalCallback((peerId, signal) => {
+          console.log('Sending signal to', peerId, signal.type || 'ice-candidate');
+          if (signal.type === 'offer') {
+            socketService.sendOffer(room.roomId, signal, peerId);
+          } else if (signal.type === 'answer') {
+            socketService.sendAnswer(room.roomId, signal, peerId);
+          } else {
+            // ICE candidate
+            socketService.sendIceCandidate(room.roomId, signal, peerId);
+          }
+        });
 
-      socketService.on('webrtc-ice-candidate', ({ from, candidate }) => {
-        webrtcService.handleIceCandidate(from, candidate);
-      });
+        // Handle incoming WebRTC signals
+        const handleOffer = ({ from, offer }) => {
+          console.log('Received offer from:', from);
+          webrtcService.handleSignal(from, offer);
+        };
 
-      // Connect to existing members (after a small delay to ensure stream is ready)
-      setTimeout(async () => {
-        for (const member of members) {
-          if (member.username !== username) {
-            try {
-              const offer = await webrtcService.createOffer(member.socketId);
-              socketService.sendOffer(room.roomId, offer, member.socketId);
-            } catch (err) {
-              console.error(`Error connecting to ${member.username}:`, err);
+        const handleAnswer = ({ from, answer }) => {
+          console.log('Received answer from:', from);
+          webrtcService.handleSignal(from, answer);
+        };
+
+        const handleIceCandidate = ({ from, candidate }) => {
+          console.log('Received ICE candidate from:', from);
+          webrtcService.handleSignal(from, candidate);
+        };
+
+        socketService.on('webrtc-offer', handleOffer);
+        socketService.on('webrtc-answer', handleAnswer);
+        socketService.on('webrtc-ice-candidate', handleIceCandidate);
+
+        // Connect to existing members (after a small delay to ensure stream is ready)
+        setTimeout(() => {
+          if (!mounted) return;
+          const currentMembers = membersRef.current;
+          for (const member of currentMembers) {
+            if (member.username !== username && member.socketId) {
+              console.log('Initiating connection to:', member.username, member.socketId);
+              webrtcService.connectToPeer(member.socketId);
             }
           }
+        }, 1000);
+        
+        setWebrtcInitialized(true);
+        
+      } catch (err) {
+        console.error('WebRTC init error:', err);
+        if (mounted) {
+          setMediaError('Could not access camera/microphone. Please check permissions.');
         }
-      }, 500);
-      
-    } catch (err) {
-      console.error('WebRTC init error:', err);
-      setMediaError('Could not access camera/microphone. Please check permissions.');
-    } finally {
-      setIsInitializing(false);
-    }
-  }, [room.roomId, username, members]);
+      } finally {
+        if (mounted) {
+          setIsInitializing(false);
+        }
+      }
+    };
 
-  useEffect(() => {
     initWebRTC();
 
     // Handle new member joining - connect to them
     const handleNewMember = ({ username: newUsername, members: newMembers }) => {
       const newMember = newMembers.find(m => m.username === newUsername);
-      if (newMember && newUsername !== username) {
-        setTimeout(async () => {
-          try {
-            const offer = await webrtcService.createOffer(newMember.socketId);
-            socketService.sendOffer(room.roomId, offer, newMember.socketId);
-          } catch (err) {
-            console.error(`Error connecting to new member ${newUsername}:`, err);
+      if (newMember && newUsername !== username && newMember.socketId) {
+        console.log('New member joined, initiating connection:', newUsername, newMember.socketId);
+        setTimeout(() => {
+          if (mounted) {
+            webrtcService.connectToPeer(newMember.socketId);
           }
-        }, 500);
+        }, 1000);
       }
     };
 
     // Handle member leaving - cleanup their stream
-    const handleMemberLeft = ({ username: leftUsername }) => {
-      setStreams(prev => {
-        const newStreams = { ...prev };
-        // Find and remove the stream for the member who left
-        Object.keys(newStreams).forEach(key => {
-          const member = members.find(m => m.socketId === key);
-          if (member?.username === leftUsername) {
-            delete newStreams[key];
-          }
+    const handleMemberLeft = ({ username: leftUsername, members: remainingMembers }) => {
+      console.log('Member left:', leftUsername);
+      // Find which socketId belonged to this user by checking what's NOT in remaining members
+      if (mounted) {
+        setStreams(prev => {
+          const newStreams = { ...prev };
+          const remainingSocketIds = new Set(remainingMembers.map(m => m.socketId));
+          // Remove streams for socket IDs that are no longer in the members list
+          Object.keys(newStreams).forEach(socketId => {
+            if (!remainingSocketIds.has(socketId)) {
+              delete newStreams[socketId];
+              webrtcService.closeConnection(socketId);
+            }
+          });
+          return newStreams;
         });
-        return newStreams;
-      });
+      }
     };
 
     socketService.on('member-joined', handleNewMember);
     socketService.on('member-left', handleMemberLeft);
 
     return () => {
+      mounted = false;
       socketService.off('member-joined', handleNewMember);
       socketService.off('member-left', handleMemberLeft);
       socketService.off('webrtc-offer');
       socketService.off('webrtc-answer');
       socketService.off('webrtc-ice-candidate');
+      webrtcService.clearSignalCallbacks();
       webrtcService.cleanup();
     };
-  }, [initWebRTC, room.roomId, username, members]);
+  }, [room.roomId, username]); // Only depend on roomId and username, NOT members
+
+  // Retry function for when media initialization fails
+  const handleRetryMedia = async () => {
+    setIsInitializing(true);
+    setMediaError(null);
+    try {
+      const stream = await webrtcService.initLocalStream(true, true);
+      setLocalStream(stream);
+      
+      // Reconnect to all current members
+      const currentMembers = membersRef.current;
+      for (const member of currentMembers) {
+        if (member.username !== username && member.socketId) {
+          console.log('Retrying connection to:', member.username);
+          webrtcService.connectToPeer(member.socketId);
+        }
+      }
+    } catch (err) {
+      console.error('Retry failed:', err);
+      setMediaError('Could not access camera/microphone. Please check permissions.');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
 
   const handleToggleAudio = () => {
     const newState = !audioEnabled;
     setAudioEnabled(newState);
-    webrtcService.toggleAudio(newState);
+    // Audio output is controlled via video element muted property, not the stream
     socketService.toggleAudio(room.roomId, newState);
   };
 
@@ -241,7 +314,7 @@ export default function GameRoom({
       {mediaError && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setMediaError(null)}>
           {mediaError}
-          <Button size="small" onClick={initWebRTC} sx={{ ml: 2 }}>
+          <Button size="small" onClick={handleRetryMedia} sx={{ ml: 2 }}>
             Retry
           </Button>
         </Alert>

@@ -265,16 +265,19 @@ module.exports = function (io) {
       }
     });
 
-    // WebRTC signaling
+    // WebRTC signaling - these MUST be reliable for video/audio to work
     socket.on('webrtc-offer', ({ roomId, offer, to }) => {
+      console.log(`WebRTC offer from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-offer', { from: socket.id, offer });
     });
 
     socket.on('webrtc-answer', ({ roomId, answer, to }) => {
+      console.log(`WebRTC answer from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-answer', { from: socket.id, answer });
     });
 
     socket.on('webrtc-ice-candidate', ({ roomId, candidate, to }) => {
+      console.log(`WebRTC ICE candidate from ${socket.id} to ${to}`);
       io.to(to).emit('webrtc-ice-candidate', { from: socket.id, candidate });
     });
 
