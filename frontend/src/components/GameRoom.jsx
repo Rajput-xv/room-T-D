@@ -443,6 +443,9 @@ export default function GameRoom({
                       severity={truthDare.type === 'truth' ? 'info' : 'warning'} 
                       sx={{ mt: 2 }}
                     >
+                      <Typography variant="subtitle2" color="text.secondary">
+                        {currentPlayer}'s {truthDare.type === 'truth' ? 'Truth' : 'Dare'}:
+                      </Typography>
                       <Typography variant="subtitle1" fontWeight="bold">
                         {truthDare.type === 'truth' ? '❓ TRUTH' : '⚡ DARE'} #{spinResult}
                       </Typography>

@@ -12,18 +12,40 @@ const loadContent = () => {
     
     if (fs.existsSync(truthsPath)) {
       truths = JSON.parse(fs.readFileSync(truthsPath, 'utf-8'));
-      // console.log(`✅ Loaded ${truths.length} truths`);
+      console.log(`✅ Loaded ${truths.length} truths`);
     } else {
       console.warn('⚠️ truths.json not found, using defaults');
-      truths = ['What is your biggest fear?', 'What is your biggest secret?'];
+      truths = [
+        'What is your biggest fear?',
+        'What is your biggest secret?',
+        'What is your most embarrassing moment?',
+        'Who was your first crush?',
+        'What is the worst lie you ever told?',
+        'What is your guilty pleasure?',
+        'What is your biggest regret?',
+        'What is something you have never told anyone?',
+        'What is your weirdest habit?',
+        'What is the most childish thing you still do?'
+      ];
     }
     
     if (fs.existsSync(daresPath)) {
       dares = JSON.parse(fs.readFileSync(daresPath, 'utf-8'));
-      // console.log(`✅ Loaded ${dares.length} dares`);
+      console.log(`✅ Loaded ${dares.length} dares`);
     } else {
       console.warn('⚠️ dares.json not found, using defaults');
-      dares = ['Do 10 push-ups', 'Sing a song'];
+      dares = [
+        'Do 10 push-ups',
+        'Sing a song',
+        'Dance for 30 seconds',
+        'Do your best animal impression',
+        'Speak in an accent for the next 3 turns',
+        'Let someone post anything on your social media',
+        'Call a friend and sing happy birthday',
+        'Do your best celebrity impression',
+        'Tell a joke and make everyone laugh',
+        'Do 20 jumping jacks'
+      ];
     }
   } catch (err) {
     console.error('Error loading content files:', err);
@@ -64,12 +86,28 @@ class ContentService {
   // Get content by wheel number (1-10) with random group selection
   // Groups the content into chunks of 10, randomly picks a group, then uses wheelNumber to index
   static getContentByWheelNumber(type, wheelNumber) {
-    const content = type === 'truth' ? this.getTruths() : this.getDares();
+    // Validate type
+    if (type !== 'truth' && type !== 'dare') {
+      console.error(`Invalid content type: ${type}`);
+      return type === 'truth' ? 'What is your biggest fear?' : 'Do 10 push-ups';
+    }
+    
+    // Get the correct content array based on type
+    const content = type === 'truth' ? [...truths] : [...dares];
+    
+    console.log(`Getting content for type: ${type}, wheelNumber: ${wheelNumber}, total items: ${content.length}`);
+    
+    if (content.length === 0) {
+      console.warn(`No content found for type: ${type}`);
+      return type === 'truth' ? 'What is your biggest fear?' : 'Do 10 push-ups';
+    }
     
     // If 10 or fewer items, just use wheelNumber directly
     if (content.length <= 10) {
       const index = Math.min(wheelNumber - 1, content.length - 1);
-      return content[index];
+      const result = content[index];
+      console.log(`Direct index ${index}: "${result}"`);
+      return result;
     }
     
     // Group content into chunks of 10
@@ -85,7 +123,10 @@ class ContentService {
     // Use wheelNumber (1-10) to get item from selected group
     // wheelNumber 1 = index 0, wheelNumber 10 = index 9
     const index = Math.min(wheelNumber - 1, selectedGroup.length - 1);
-    return selectedGroup[index];
+    const result = selectedGroup[index];
+    
+    console.log(`Group ${randomGroupIndex}, index ${index}: "${result}"`);
+    return result;
   }
 
   static getTruthsCount() {

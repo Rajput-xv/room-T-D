@@ -69,6 +69,15 @@ export default function App() {
     socket.on('room-created', ({ roomId, roomName, room }) => {
       setCurrentRoom(room);
       setMembers(room.members);
+      // Sync game state from room
+      setGamePhase(room.gamePhase || 'waiting');
+      setCurrentPlayer(room.currentPlayer || null);
+      setCurrentChoice(room.currentChoice || null);
+      setTurnOrder(room.turnOrder || []);
+      setSpinResult(room.spinResult || null);
+      if (room.currentContent && room.currentChoice) {
+        setTruthDare({ type: room.currentChoice, content: room.currentContent });
+      }
       setView('game');
       showSnackbar('Room created successfully!', 'success');
     });
@@ -76,6 +85,15 @@ export default function App() {
     socket.on('room-joined', ({ room }) => {
       setCurrentRoom(room);
       setMembers(room.members);
+      // Sync game state from room
+      setGamePhase(room.gamePhase || 'waiting');
+      setCurrentPlayer(room.currentPlayer || null);
+      setCurrentChoice(room.currentChoice || null);
+      setTurnOrder(room.turnOrder || []);
+      setSpinResult(room.spinResult || null);
+      if (room.currentContent && room.currentChoice) {
+        setTruthDare({ type: room.currentChoice, content: room.currentContent });
+      }
       setView('game');
       showSnackbar('Joined room successfully!', 'success');
     });
@@ -123,6 +141,7 @@ export default function App() {
     });
 
     socket.on('choice-made', ({ username, choice, gamePhase }) => {
+      console.log(`Choice made: ${username} chose ${choice}, gamePhase=${gamePhase}`);
       setCurrentChoice(choice);
       setGamePhase(gamePhase);
       showSnackbar(`${username} chose ${choice}!`, 'info');
@@ -133,6 +152,7 @@ export default function App() {
     });
 
     socket.on('wheel-stopped', ({ result, content, type }) => {
+      console.log(`Wheel stopped: type=${type}, result=${result}, content="${content}"`);
       setIsSpinning(false);
       setSpinResult(result);
       setTruthDare({ type, content });
@@ -140,6 +160,7 @@ export default function App() {
     });
 
     socket.on('turn-changed', ({ currentPlayer, gamePhase, currentTurnIndex, turnOrder }) => {
+      console.log(`Turn changed: player=${currentPlayer}, phase=${gamePhase}`);
       setCurrentPlayer(currentPlayer);
       setGamePhase(gamePhase);
       setTurnOrder(turnOrder);

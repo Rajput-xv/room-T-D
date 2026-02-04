@@ -147,27 +147,45 @@ module.exports = function (io) {
         if (!room) throw new Error('Room not found');
         if (room.currentPlayer !== socket.username) throw new Error('Not your turn');
         if (room.gamePhase !== 'spin') throw new Error('Choose truth or dare first');
+        if (!room.currentChoice) throw new Error('No choice made');
 
         io.to(roomId).emit('wheel-spinning', { spinning: true });
         
         // Simulate spin duration
         setTimeout(async () => {
-          // Wheel always shows 1-10
-          const wheelNumber = Math.floor(Math.random() * 10) + 1;
-          
-          // Get content using random group + wheel number
-          const selectedContent = ContentService.getContentByWheelNumber(
-            room.currentChoice, 
-            wheelNumber
-          );
-          
-          await RoomService.setSpinResult(roomId, wheelNumber, selectedContent);
-          
-          io.to(roomId).emit('wheel-stopped', { 
-            result: wheelNumber,
-            content: selectedContent,
-            type: room.currentChoice
-          });
+          try {
+            // Re-fetch room to get latest state
+            const currentRoom = await RoomService.getRoom(roomId);
+            if (!currentRoom) {
+              io.to(roomId).emit('error', { message: 'Room not found' });
+              return;
+            }
+            
+            // Wheel always shows 1-10
+            const wheelNumber = Math.floor(Math.random() * 10) + 1;
+            
+            // Get content using the CURRENT choice (truth or dare)
+            const currentChoice = currentRoom.currentChoice;
+            console.log(`Spin wheel: Player ${socket.username}, Choice: ${currentChoice}, Number: ${wheelNumber}`);
+            
+            const selectedContent = ContentService.getContentByWheelNumber(
+              currentChoice, 
+              wheelNumber
+            );
+            
+            console.log(`Selected content for ${currentChoice}: "${selectedContent}"`);
+            
+            await RoomService.setSpinResult(roomId, wheelNumber, selectedContent);
+            
+            io.to(roomId).emit('wheel-stopped', { 
+              result: wheelNumber,
+              content: selectedContent,
+              type: currentChoice
+            });
+          } catch (innerErr) {
+            console.error('Error in spin-wheel timeout:', innerErr);
+            io.to(roomId).emit('error', { message: innerErr.message });
+          }
         }, 3000);
       } catch (err) {
         io.to(socket.id).emit('error', { message: err.message });
