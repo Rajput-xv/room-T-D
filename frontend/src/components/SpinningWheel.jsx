@@ -11,14 +11,15 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [result, setResult] = useState(null);
+  const [hasSpun, setHasSpun] = useState(false);
 
   const rotationRef = useRef(0);
   const animRef = useRef(null);
   const spinningRef = useRef(false);
 
-  const DECEL = 600; // controls how “heavy” the wheel feels
-  const EXTRA_SPINS_MIN = 3;
-  const EXTRA_SPINS_MAX = 6;
+  const DECEL = 200; // controls how "heavy" the wheel feels (lower = longer spin)
+  const EXTRA_SPINS_MIN = 5;
+  const EXTRA_SPINS_MAX = 8;
 
   useEffect(() => {
     rotationRef.current = rotation;
@@ -79,6 +80,7 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
         setRotation(target);
         setIsSpinning(false);
         spinningRef.current = false;
+        setHasSpun(true);
 
         const finalNumber = numbers[finalIndex];
         setResult(finalNumber);
@@ -164,14 +166,16 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
         </svg>
       </Box>
 
-      <Button
-        variant="contained"
-        size="large"
-        onClick={startSpin}
-        disabled={isSpinning || disabled}
-      >
-        {isSpinning ? 'Spinning…' : 'Spin'}
-      </Button>
+      {!isSpinning && !hasSpun && (
+        <Button
+          variant="contained"
+          size="large"
+          onClick={startSpin}
+          disabled={disabled}
+        >
+          Spin
+        </Button>
+      )}
 
       {/* {result && !isSpinning && (
         <Typography variant="h5" sx={{ mt: 2 }}>

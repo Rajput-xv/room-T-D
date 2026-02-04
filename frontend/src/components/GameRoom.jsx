@@ -446,17 +446,25 @@ export default function GameRoom({
                       </Typography>
                     </Alert>
 
-                    {/* Next Turn Button */}
-                    <Box sx={{ textAlign: 'center', mt: 3 }}>
-                      <Button 
-                        variant="contained" 
-                        color="primary" 
-                        size="large"
-                        onClick={onNextTurn}
-                      >
-                        Next Player's Turn →
-                      </Button>
-                    </Box>
+                    {/* Next Turn Button - Only visible to current player and host */}
+                    {(isCurrentPlayer || isHost) ? (
+                      <Box sx={{ textAlign: 'center', mt: 3 }}>
+                        <Button 
+                          variant="contained" 
+                          color="primary" 
+                          size="large"
+                          onClick={onNextTurn}
+                        >
+                          Next Player's Turn →
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', mt: 3 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Waiting for {currentPlayer} to proceed to next turn...
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 )}
               </>
