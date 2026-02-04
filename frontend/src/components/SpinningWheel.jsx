@@ -34,9 +34,9 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
   const segmentCenterAngle = (index) =>
     index * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
 
-  // compute absolute rotation needed to land exactly under pointer
+  // compute absolute rotation needed to land exactly under pointer (at bottom)
   const computeTargetRotation = (current, index, extraSpins) => {
-    const targetModulo = normalize(360 - segmentCenterAngle(index));
+    const targetModulo = normalize(180 - segmentCenterAngle(index));
     return current - normalize(current) + extraSpins * 360 + targetModulo;
   };
 
@@ -97,7 +97,7 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
       <Typography variant="h6">🎡 Spin the Wheel</Typography>
 
       <Box sx={{ position: 'relative', display: 'inline-block', my: 2 }}>
-        {/* pointer */}
+        {/* pointer at bottom, pointing up */}
         <Box
           sx={{
             position: 'absolute',
@@ -108,7 +108,7 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
             height: 0,
             borderLeft: '12px solid transparent',
             borderRight: '12px solid transparent',
-            borderBottom: '22px solid #e53935',
+            borderTop: '22px solid #e53935',
             zIndex: 10
           }}
         />
@@ -173,11 +173,11 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
         {isSpinning ? 'Spinning…' : 'Spin'}
       </Button>
 
-      {result && !isSpinning && (
+      {/* {result && !isSpinning && (
         <Typography variant="h5" sx={{ mt: 2 }}>
           Result: {result}
         </Typography>
-      )}
+      )} */}
     </Box>
   );
 }

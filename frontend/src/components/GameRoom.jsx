@@ -436,9 +436,9 @@ export default function GameRoom({
                       <Typography variant="subtitle2" color="text.secondary">
                         {currentPlayer}'s {truthDare.type === 'truth' ? 'Truth' : 'Dare'}:
                       </Typography>
-                      <Typography variant="subtitle1" fontWeight="bold">
+                      {/* <Typography variant="subtitle1" fontWeight="bold">
                         {truthDare.type === 'truth' ? '❓ TRUTH' : '⚡ DARE'} #{spinResult}
-                      </Typography>
+                      </Typography> */}
                       <Typography variant="h6" sx={{ mt: 1 }}>
                         {truthDare.content}
                       </Typography>
