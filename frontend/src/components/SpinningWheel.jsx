@@ -4,102 +4,100 @@ import { Box, Button, Typography } from '@mui/material';
 const numbers = Array.from({ length: 10 }, (_, i) => i + 1);
 const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'];
 
-export default function SpinningWheel({ onSpin, forcedResult = null, disabled = false }) {
+// Animation duration in ms - matches server's 3000ms timeout
+const SPIN_DURATION = 2800;
+const EXTRA_SPINS = 5;
+
+export default function SpinningWheel({ onSpin, forcedResult = null, disabled = false, isSpinning = false }) {
   const SEGMENTS = numbers.length;
   const SEGMENT_ANGLE = 360 / SEGMENTS;
 
   const [rotation, setRotation] = useState(0);
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [result, setResult] = useState(null);
+  const [isAnimating, setIsAnimating] = useState(false);
   const [hasSpun, setHasSpun] = useState(false);
 
   const rotationRef = useRef(0);
   const animRef = useRef(null);
-  const spinningRef = useRef(false);
-
-  const DECEL = 200; // controls how "heavy" the wheel feels (lower = longer spin)
-  const EXTRA_SPINS_MIN = 5;
-  const EXTRA_SPINS_MAX = 8;
+  const lastResultRef = useRef(null);
 
   useEffect(() => {
     rotationRef.current = rotation;
   }, [rotation]);
 
   useEffect(() => {
-    return () => cancelAnimationFrame(animRef.current);
+    return () => {
+      if (animRef.current) {
+        cancelAnimationFrame(animRef.current);
+      }
+    };
   }, []);
+
+  // When server sends isSpinning=true with forcedResult, start animation
+  useEffect(() => {
+    if (isSpinning && forcedResult != null && forcedResult !== lastResultRef.current && !isAnimating) {
+      lastResultRef.current = forcedResult;
+      animateToTarget(forcedResult);
+    }
+  }, [isSpinning, forcedResult]);
 
   const normalize = (deg) => ((deg % 360) + 360) % 360;
 
-  // angle of a segment’s center measured clockwise from pointer (top)
-  const segmentCenterAngle = (index) =>
-    index * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
+  const segmentCenterAngle = (index) => index * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
 
-  // compute absolute rotation needed to land exactly under pointer (at bottom)
-  const computeTargetRotation = (current, index, extraSpins) => {
+  const computeTargetRotation = (current, index) => {
     const targetModulo = normalize(180 - segmentCenterAngle(index));
-    return current - normalize(current) + extraSpins * 360 + targetModulo;
+    return current - normalize(current) + EXTRA_SPINS * 360 + targetModulo;
   };
 
-  const startSpin = () => {
-    if (spinningRef.current || disabled) return;
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
-    spinningRef.current = true;
-    setIsSpinning(true);
-    setResult(null);
+  const animateToTarget = (targetNumber) => {
+    setIsAnimating(true);
+    setHasSpun(false);
 
     const current = rotationRef.current;
+    const finalIndex = numbers.indexOf(targetNumber);
+    if (finalIndex === -1) {
+      setIsAnimating(false);
+      return;
+    }
 
-    const finalIndex =
-      forcedResult && numbers.includes(forcedResult)
-        ? numbers.indexOf(forcedResult)
-        : Math.floor(Math.random() * SEGMENTS);
-
-    const extraSpins =
-      Math.floor(Math.random() * (EXTRA_SPINS_MAX - EXTRA_SPINS_MIN + 1)) +
-      EXTRA_SPINS_MIN;
-
-    const target = computeTargetRotation(current, finalIndex, extraSpins);
+    const target = computeTargetRotation(current, finalIndex);
     const distance = target - current;
-
-    // v² = 2as → initial angular velocity
-    let velocity = Math.sqrt(2 * DECEL * distance);
-    let lastTime = null;
+    const startTime = performance.now();
 
     const animate = (time) => {
-      if (!lastTime) lastTime = time;
-      const dt = (time - lastTime) / 1000;
-      lastTime = time;
+      const elapsed = time - startTime;
+      const progress = Math.min(elapsed / SPIN_DURATION, 1);
+      const easedProgress = easeOutCubic(progress);
 
-      velocity = Math.max(0, velocity - DECEL * dt);
-      rotationRef.current += velocity * dt;
+      rotationRef.current = current + distance * easedProgress;
       setRotation(rotationRef.current);
 
-      if (velocity <= 0) {
+      if (progress < 1) {
+        animRef.current = requestAnimationFrame(animate);
+      } else {
         rotationRef.current = target;
         setRotation(target);
-        setIsSpinning(false);
-        spinningRef.current = false;
+        setIsAnimating(false);
         setHasSpun(true);
-
-        const finalNumber = numbers[finalIndex];
-        setResult(finalNumber);
-        onSpin?.(finalNumber);
-        return;
       }
-
-      animRef.current = requestAnimationFrame(animate);
     };
 
     animRef.current = requestAnimationFrame(animate);
   };
 
+  // Click handler - just trigger server spin, don't animate locally
+  const handleSpinClick = () => {
+    if (isAnimating || disabled || isSpinning) return;
+    onSpin?.();
+  };
+
   return (
-    <Box sx={{ textAlign: 'center' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <Typography variant="h6">🎡 Spin the Wheel</Typography>
 
-      <Box sx={{ position: 'relative', display: 'inline-block', my: 2 }}>
-        {/* pointer at bottom, pointing up */}
+      <Box sx={{ position: 'relative', my: 2 }}>
         <Box
           sx={{
             position: 'absolute',
@@ -166,22 +164,16 @@ export default function SpinningWheel({ onSpin, forcedResult = null, disabled = 
         </svg>
       </Box>
 
-      {!isSpinning && !hasSpun && (
+      {!isAnimating && !isSpinning && !hasSpun && (
         <Button
           variant="contained"
           size="large"
-          onClick={startSpin}
+          onClick={handleSpinClick}
           disabled={disabled}
         >
           Spin
         </Button>
       )}
-
-      {/* {result && !isSpinning && (
-        <Typography variant="h5" sx={{ mt: 2 }}>
-          Result: {result}
-        </Typography>
-      )} */}
     </Box>
   );
 }

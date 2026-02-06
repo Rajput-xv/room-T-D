@@ -146,8 +146,11 @@ export default function App() {
       showSnackbar(`${username} chose ${choice}!`, 'info');
     });
 
-    socket.on('wheel-spinning', ({ spinning }) => {
+    socket.on('wheel-spinning', ({ spinning, targetNumber }) => {
       setIsSpinning(spinning);
+      if (targetNumber) {
+        setSpinResult(targetNumber); // Set immediately so wheel can animate to it
+      }
     });
 
     socket.on('wheel-stopped', ({ result, content, type }) => {

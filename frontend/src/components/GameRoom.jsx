@@ -409,9 +409,8 @@ export default function GameRoom({
                     <SpinningWheel 
                       onSpin={onSpin} 
                       isSpinning={isSpinning}
-                      result={spinResult}
+                      forcedResult={spinResult}
                       disabled={!isCurrentPlayer}
-                      showSpinButton={isCurrentPlayer}
                     />
                     {!isCurrentPlayer && (
                       <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
@@ -427,9 +426,8 @@ export default function GameRoom({
                     <SpinningWheel 
                       onSpin={onSpin} 
                       isSpinning={false}
-                      result={spinResult}
+                      forcedResult={spinResult}
                       disabled={true}
-                      showSpinButton={false}
                     />
                     <Alert 
                       severity={truthDare.type === 'truth' ? 'info' : 'warning'} 

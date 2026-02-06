@@ -149,9 +149,13 @@ module.exports = function (io) {
         if (room.gamePhase !== 'spin') throw new Error('Choose truth or dare first');
         if (!room.currentChoice) throw new Error('No choice made');
 
-        io.to(roomId).emit('wheel-spinning', { spinning: true });
+        // Wheel always shows 1-10 - decide the number immediately
+        const wheelNumber = Math.floor(Math.random() * 10) + 1;
         
-        // Simulate spin duration
+        // Send wheel number immediately so frontend can animate to it
+        io.to(roomId).emit('wheel-spinning', { spinning: true, targetNumber: wheelNumber });
+        
+        // Wait for animation to complete (~3 seconds) then send the content
         setTimeout(async () => {
           try {
             // Re-fetch room to get latest state
@@ -160,9 +164,6 @@ module.exports = function (io) {
               io.to(roomId).emit('error', { message: 'Room not found' });
               return;
             }
-            
-            // Wheel always shows 1-10
-            const wheelNumber = Math.floor(Math.random() * 10) + 1;
             
             // Get content using the CURRENT choice (truth or dare)
             // Pass roomId for history tracking to prevent repetition
