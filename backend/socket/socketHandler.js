@@ -165,11 +165,13 @@ module.exports = function (io) {
             const wheelNumber = Math.floor(Math.random() * 10) + 1;
             
             // Get content using the CURRENT choice (truth or dare)
+            // Pass roomId for history tracking to prevent repetition
             const currentChoice = currentRoom.currentChoice;
             
             const selectedContent = ContentService.getContentByWheelNumber(
               currentChoice, 
-              wheelNumber
+              wheelNumber,
+              roomId  // Pass roomId for tracking used content
             );
             
             await RoomService.setSpinResult(roomId, wheelNumber, selectedContent);
@@ -214,6 +216,9 @@ module.exports = function (io) {
         // Notify all members that room is ending
         io.to(roomId).emit('room-ended', { message: 'Host has ended the room' });
         
+        // Clean up content history tracking for this room
+        ContentService.cleanupRoom(roomId);
+        
         // Delete room from database
         await RoomService.deleteRoom(roomId);
         
@@ -231,13 +236,13 @@ module.exports = function (io) {
 
     // Select truth
     socket.on('select-truth', ({ roomId }) => {
-      const question = ContentService.getTruth();
+      const question = ContentService.getTruth(roomId);
       io.to(roomId).emit('truth-question', { question });
     });
 
     // Select dare
     socket.on('select-dare', ({ roomId }) => {
-      const task = ContentService.getDare();
+      const task = ContentService.getDare(roomId);
       io.to(roomId).emit('dare-task', { task });
     });
 
